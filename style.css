@@ -1,0 +1,174 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    min-height: 100vh;
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(180deg, #0a1628 0%, #163a5f 55%, #1a4a6e 100%);
+    color: #e8f4ff;
+}
+
+/* Écran d'accueil : zone pleine page pour positionner titre et lien séparément */
+.title-screen {
+    position: relative;
+    min-height: 100vh;
+}
+
+/* Titre en haut, centré horizontalement */
+.game-title {
+    position: absolute;
+    top: 16vh;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: clamp(2.5rem, 8vw, 4.5rem);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-shadow: 0 2px 24px rgba(100, 180, 255, 0.35);
+    white-space: nowrap;
+}
+
+/* Start Game à son emplacement d'origine : centre, légèrement remonté */
+.start-button {
+    position: absolute;
+    top: calc(50% - 6vh);
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    color: #e8f4ff;
+    text-decoration: none;
+    cursor: pointer;
+    opacity: 0.85;
+    transition: opacity 0.15s ease;
+}
+
+.start-button:hover {
+    opacity: 1;
+}
+
+/* —— Sélection de personnage —— */
+.select-screen {
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12vh 1.5rem 4rem;
+}
+
+.select-title {
+    font-size: clamp(1.6rem, 4vw, 2.4rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.5rem;
+}
+
+.select-hint {
+    opacity: 0.7;
+    margin-bottom: 2.5rem;
+    font-size: 0.95rem;
+}
+
+.character-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    justify-content: center;
+    max-width: 900px;
+}
+
+.character-card {
+    width: 200px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    background: rgba(8, 24, 40, 0.45);
+    border: 1px solid rgba(158, 201, 240, 0.25);
+    border-radius: 10px;
+    transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    cursor: pointer;
+}
+
+.character-card:hover {
+    border-color: rgba(158, 201, 240, 0.7);
+    background: rgba(12, 36, 56, 0.65);
+    transform: translateY(-3px);
+}
+
+.character-card--locked {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.character-card__preview {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 0.85rem;
+    overflow: hidden;
+    image-rendering: pixelated;
+}
+
+.character-card__preview img {
+    /* Affiche seulement la 1re frame (64px) de la sprite sheet */
+    width: auto;
+    height: 64px;
+    max-width: none;
+}
+
+.character-card__name {
+    font-size: 1.25rem;
+    margin-bottom: 0.4rem;
+}
+
+.character-card__desc {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    line-height: 1.35;
+}
+
+.character-card__badge {
+    display: inline-block;
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.game-screen {
+    position: relative;
+    min-height: 100vh;
+    overflow: hidden;
+}
+
+#game-canvas {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+}
+
+.load-status {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    opacity: 0.9;
+    pointer-events: none;
+}
+
+/* Retour au menu : collé en bas à droite */
+.back-link {
+    position: absolute;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    z-index: 10;
+    color: #9ec9f0;
+    text-decoration: none;
+}
+
+.back-link:hover {
+    color: #ffffff;
+}

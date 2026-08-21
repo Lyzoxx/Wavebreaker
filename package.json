@@ -1,0 +1,14 @@
+{
+  "name": "wavebreaker",
+  "private": true,
+  "scripts": {
+    "dev": "bun run server.js",
+    "placeholders": "bun run scripts/generate-placeholders.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
