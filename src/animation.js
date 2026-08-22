@@ -6,6 +6,13 @@
  *   assets/characters/fox/walk/fox_walk.png
  *   assets/characters/fox/attack/fox_attack.png
  *   assets/characters/fox/hurt/fox_hurt.png
+ *   assets/characters/enemy/idle/enemy_idle.png
+ *   assets/characters/enemy/walk/enemy_walk.png
+ *   assets/characters/enemy/attack/enemy_attack.png
+ *   assets/characters/enemy/hurt/enemy_hurt.png
+ *   assets/characters/enemy/death/enemy_death.png
+ *
+ * Une animation avec loop:false s'arrête sur la dernière frame (finished === true).
  *
  * COMMENT MODIFIER LE NOMBRE DE FRAMES :
  *   change `frameCount` dans la config passée à SpriteAnimation.
@@ -130,7 +137,7 @@ export class AnimationController {
    * @param {string} [initial="idle"]
    * @param {string[]} [lockedStates=["attack","hurt"]] - états non interruptibles par idle/walk
    */
-  constructor(animations, initial = "idle", lockedStates = ["attack", "hurt"]) {
+  constructor(animations, initial = "idle", lockedStates = ["attack", "hurt", "death"]) {
     this.animations = animations;
     this.currentName = initial;
     this.lockedStates = new Set(lockedStates);

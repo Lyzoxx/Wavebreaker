@@ -164,6 +164,50 @@ function makeFoxSheet({ frameCount, frameW, frameH, variant }) {
   return encodePNG(sheetW, frameH, rgba);
 }
 
+/** Gobelin vert (placeholder) — épée à droite de la frame. */
+function drawEnemyFrame(rgba, sheetW, frameX, frameW, frameH, variant) {
+  const ox = frameX;
+  const walkShift = variant === "walk" ? ((frameX / frameW) % 2 === 0 ? -2 : 2) : 0;
+  const deathDrop = variant === "death" ? 14 : 0;
+  const swordRaise = variant === "attack" ? -10 : 0;
+
+  // Tête / oreilles
+  fillRect(rgba, sheetW, ox + 18, 8 + deathDrop, 8, 10, [50, 160, 55]);
+  fillRect(rgba, sheetW, ox + 38, 8 + deathDrop, 8, 10, [50, 160, 55]);
+  fillRect(rgba, sheetW, ox + 22, 12 + deathDrop, 20, 16, [70, 190, 70]);
+  fillRect(rgba, sheetW, ox + 36, 18 + deathDrop, 10, 6, [50, 150, 55]); // nez
+  fillRect(rgba, sheetW, ox + 26, 16 + deathDrop, 4, 4, [20, 20, 20]);
+  fillRect(rgba, sheetW, ox + 34, 16 + deathDrop, 4, 4, [20, 20, 20]);
+
+  // Tunique brune
+  fillRect(rgba, sheetW, ox + 22, 28 + deathDrop, 20, 16, [110, 70, 40]);
+  // Bras / jambes verts
+  fillRect(rgba, sheetW, ox + 16, 30 + deathDrop, 8, 10, [70, 190, 70]);
+  fillRect(rgba, sheetW, ox + 40, 30 + deathDrop, 8, 10, [70, 190, 70]);
+  fillRect(rgba, sheetW, ox + 24 + walkShift, 44 + deathDrop, 6, 14, [70, 190, 70]);
+  fillRect(rgba, sheetW, ox + 34 - walkShift, 44 + deathDrop, 6, 14, [70, 190, 70]);
+
+  // Épée (à droite)
+  fillRect(rgba, sheetW, ox + 46, 22 + swordRaise + deathDrop, 4, 22, [200, 205, 210]);
+  fillRect(rgba, sheetW, ox + 44, 42 + swordRaise + deathDrop, 8, 4, [120, 80, 45]);
+
+  if (variant === "hurt") {
+    fillRect(rgba, sheetW, ox + 20, 12, 24, 44, [255, 80, 80, 70]);
+  }
+  if (variant === "death") {
+    fillRect(rgba, sheetW, ox + 16, 50, 32, 8, [40, 40, 40, 90]);
+  }
+}
+
+function makeEnemySheet({ frameCount, frameW, frameH, variant }) {
+  const sheetW = frameCount * frameW;
+  const rgba = new Uint8Array(sheetW * frameH * 4);
+  for (let f = 0; f < frameCount; f++) {
+    drawEnemyFrame(rgba, sheetW, f * frameW, frameW, frameH, variant);
+  }
+  return encodePNG(sheetW, frameH, rgba);
+}
+
 function makeFireballSheet({ frameCount, frameW, frameH }) {
   const sheetW = frameCount * frameW;
   const rgba = new Uint8Array(sheetW * frameH * 4);
@@ -197,6 +241,26 @@ const jobs = [
   {
     path: "assets/projectiles/fireball.png",
     data: makeFireballSheet({ frameCount: 4, frameW: 32, frameH: 24 }),
+  },
+  {
+    path: "assets/characters/enemy/idle/enemy_idle.png",
+    data: makeEnemySheet({ frameCount: 4, frameW: 64, frameH: 64, variant: "idle" }),
+  },
+  {
+    path: "assets/characters/enemy/walk/enemy_walk.png",
+    data: makeEnemySheet({ frameCount: 6, frameW: 64, frameH: 64, variant: "walk" }),
+  },
+  {
+    path: "assets/characters/enemy/attack/enemy_attack.png",
+    data: makeEnemySheet({ frameCount: 6, frameW: 64, frameH: 64, variant: "attack" }),
+  },
+  {
+    path: "assets/characters/enemy/hurt/enemy_hurt.png",
+    data: makeEnemySheet({ frameCount: 2, frameW: 64, frameH: 64, variant: "hurt" }),
+  },
+  {
+    path: "assets/characters/enemy/death/enemy_death.png",
+    data: makeEnemySheet({ frameCount: 5, frameW: 64, frameH: 64, variant: "death" }),
   },
 ];
 

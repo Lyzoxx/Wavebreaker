@@ -1,12 +1,11 @@
 /**
- * game.js — boucle principale, canvas, décor selon le personnage
- *
- * Pour l’instant : pas de déplacement ni d’attaque.
- * Les systèmes player/combat restent prêts pour plus tard.
+ * game.js — boucle principale, décor, Fox, ennemis
  */
 
 import { createFoxPlayer } from "./player.js";
 import { getCharacter } from "./characters.js";
+import { CombatSystem } from "./combat.js";
+import { createEnemy, ENEMY_CONFIG } from "./enemy.js";
 
 const canvas = document.getElementById("game-canvas");
 if (!(canvas instanceof HTMLCanvasElement)) {
@@ -16,6 +15,16 @@ if (!(canvas instanceof HTMLCanvasElement)) {
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Impossible d'obtenir le contexte 2D");
 
+/** État des touches */
+const keys = Object.create(null);
+
+const INPUT_MAP = {
+  up: ["KeyW", "KeyZ", "ArrowUp"],
+  down: ["KeyS", "ArrowDown"],
+  left: ["KeyA", "KeyQ", "ArrowLeft"],
+  right: ["KeyD", "ArrowRight"],
+};
+
 function resize() {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
@@ -23,6 +32,26 @@ function resize() {
 
 window.addEventListener("resize", resize);
 resize();
+
+window.addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+
+window.addEventListener("keyup", (e) => {
+  keys[e.code] = false;
+});
+
+function readMovementInput() {
+  return {
+    up: INPUT_MAP.up.some((c) => keys[c]),
+    down: INPUT_MAP.down.some((c) => keys[c]),
+    left: INPUT_MAP.left.some((c) => keys[c]),
+    right: INPUT_MAP.right.some((c) => keys[c]),
+  };
+}
 
 /** Lit ?character=fox depuis l'URL */
 function readSelectedCharacterId() {
@@ -213,6 +242,17 @@ function drawBackground(c, backgroundId) {
   c.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+function drawHud(c, player, enemies) {
+  c.fillStyle = "rgba(0, 0, 0, 0.4)";
+  c.fillRect(16, 16, 220, 52);
+  c.fillStyle = "#e8f4ff";
+  c.font = "14px Segoe UI, sans-serif";
+  c.fillText(`Fox HP ${player.hp}/${player.maxHp}`, 28, 38);
+  const enemy = enemies.find((e) => e.alive || e.state === "death");
+  const enemyHp = enemy ? `${Math.max(0, enemy.health)}/${enemy.maxHealth}` : "—";
+  c.fillText(`Ennemi HP ${enemyHp}`, 28, 56);
+}
+
 /**
  * Charge le bon personnage selon l'id.
  * Ajoute un `case` ici quand tu créeras d'autres persos.
@@ -239,27 +279,56 @@ async function main() {
   try {
     const pos = startPosition(canvas);
     const player = await createPlayerFor(def.id, pos.x, pos.y);
-    // Idle uniquement pour l'instant
     player.anims.play("idle");
+
+    const combat = new CombatSystem();
+    await combat.load();
+
+    /** Tableau : prêt pour plusieurs ennemis plus tard. */
+    const enemies = [];
+    const enemy = await createEnemy(pos.x + ENEMY_CONFIG.spawnDistance, pos.y);
+    enemy.faceTarget(player);
+    enemies.push(enemy);
 
     if (status) status.remove();
 
     let last = performance.now();
+    let spaceWasDown = false;
 
     function frame(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
-      // Garde la position (haut-gauche) si la fenêtre est redimensionnée
-      const posNow = startPosition(canvas);
-      player.x = posNow.x;
-      player.y = posNow.y;
+      const bounds = { width: canvas.width, height: canvas.height };
+      const grassY = startPosition(canvas).y;
 
-      // Anim idle seulement — pas de déplacement / attaque pour le moment
-      player.anims.update(dt);
+      const input = readMovementInput();
+      player.update(input, dt, bounds);
+      // Reste sur l'herbe (scène forêt)
+      player.y = grassY;
+
+      const spaceDown = !!keys.Space;
+      if (spaceDown && !spaceWasDown) {
+        combat.tryAttack(player, "fireball");
+      }
+      spaceWasDown = spaceDown;
+
+      for (const e of enemies) {
+        e.y = grassY;
+        e.update(player, dt, bounds, (en, pl) => combat.resolveEnemyMeleeHit(en, pl));
+      }
+
+      combat.update(player, dt, bounds, enemies);
+
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        if (!enemies[i].alive) enemies.splice(i, 1);
+      }
 
       drawBackground(ctx, def.background);
       player.draw(ctx);
+      for (const e of enemies) e.draw(ctx);
+      combat.draw(ctx);
+      drawHud(ctx, player, enemies);
 
       requestAnimationFrame(frame);
     }

@@ -84,6 +84,9 @@ export class Player {
     this.hp = 100;
     this.maxHp = 100;
 
+    /** Hitbox corps (indépendante de la taille du sprite affiché). */
+    this.hitbox = { width: 36, height: 70, offsetX: 0, offsetY: 6 };
+
     /** Pendant hurt, on bloque un peu le contrôle */
     this.hurtTimer = 0;
   }
@@ -169,7 +172,7 @@ export class Player {
    * @param {number} amount
    */
   takeDamage(amount) {
-    if (this.state === "hurt") return;
+    if (this.state === "hurt" || this.hp <= 0) return;
     this.hp = Math.max(0, this.hp - amount);
     this.state = "hurt";
     this.hurtTimer = 0.25;

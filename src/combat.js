@@ -14,6 +14,72 @@
 import { SpriteAnimation, loadImage } from "./animation.js";
 
 /**
+ * Distance entre deux points / entités {x, y}.
+ * @param {{x:number, y:number}} a
+ * @param {{x:number, y:number}} b
+ */
+export function distanceBetween(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/**
+ * @param {{x:number, y:number, w:number, h:number}} a
+ * @param {{x:number, y:number, w:number, h:number}} b
+ */
+export function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/**
+ * Hitbox corps d'une entité (player ou enemy).
+ * @param {{ x:number, y:number, hitbox:{ width:number, height:number, offsetX?:number, offsetY?:number } }} entity
+ */
+export function hitboxRect(entity) {
+  const hb = entity.hitbox;
+  const w = hb.width;
+  const h = hb.height;
+  return {
+    x: entity.x - w / 2 + (hb.offsetX ?? 0),
+    y: entity.y - h / 2 + (hb.offsetY ?? 0),
+    w,
+    h,
+  };
+}
+
+/**
+ * Zone de frappe devant l'ennemi (retournée selon facingRight).
+ * @param {{ x:number, y:number, facingRight:boolean, attackHitbox:{ width:number, height:number, offsetX?:number, offsetY?:number } }} enemy
+ */
+export function attackHitboxRect(enemy) {
+  const hb = enemy.attackHitbox;
+  const dir = enemy.facingRight ? 1 : -1;
+  const w = hb.width;
+  const h = hb.height;
+  const ox = (hb.offsetX ?? 0) * dir;
+  return {
+    x: enemy.x + ox - w / 2,
+    y: enemy.y + (hb.offsetY ?? 0) - h / 2,
+    w,
+    h,
+  };
+}
+
+/**
+ * Hitbox d'un projectile (pas la taille visuelle du sprite).
+ * @param {{ x:number, y:number, hitbox?: { width:number, height:number } }} projectile
+ */
+export function projectileHitboxRect(projectile) {
+  const w = projectile.hitbox?.width ?? 28;
+  const h = projectile.hitbox?.height ?? 20;
+  return {
+    x: projectile.x - w / 2,
+    y: projectile.y - h / 2,
+    w,
+    h,
+  };
+}
+
+/**
  * Catalogue des attaques.
  * spawnFrame = index de frame de l'anim attack où le projectile apparaît
  * (0 = première frame). Pour Fox attack (5 frames), 2 = milieu du coup de bâton.
@@ -74,6 +140,9 @@ export class Projectile {
     this.scale = scale;
     this.facingRight = facingRight;
     this.alive = true;
+    this.hitbox = { width: 28, height: 20 };
+    /** Empêche de toucher plusieurs fois le même ennemi. */
+    this.hitIds = new Set();
   }
 
   /** @param {number} dt */
@@ -143,8 +212,9 @@ export class CombatSystem {
    * @param {import("./player.js").Player} player
    * @param {number} dt
    * @param {{ width:number, height:number }} bounds
+   * @param {Array<{ takeDamage:(n:number)=>void, alive:boolean, isDead?:boolean }>} [enemies]
    */
-  update(player, dt, bounds) {
+  update(player, dt, bounds, enemies = []) {
     if (this.cooldownLeft > 0) {
       this.cooldownLeft = Math.max(0, this.cooldownLeft - dt);
     }
@@ -171,7 +241,45 @@ export class CombatSystem {
         p.alive = false;
       }
     }
+
+    this.resolveProjectileHits(enemies);
     this.projectiles = this.projectiles.filter((p) => p.alive);
+  }
+
+  /**
+   * Collision boule de feu ↔ ennemis.
+   * @param {Array<{ takeDamage:(n:number)=>void, alive:boolean, isDead?:boolean }>} enemies
+   */
+  resolveProjectileHits(enemies) {
+    for (const p of this.projectiles) {
+      if (!p.alive) continue;
+      const pRect = projectileHitboxRect(p);
+      for (const enemy of enemies) {
+        if (!enemy.alive || enemy.isDead) continue;
+        const id = enemy;
+        if (p.hitIds.has(id)) continue;
+        if (rectsOverlap(pRect, hitboxRect(enemy))) {
+          p.hitIds.add(id);
+          enemy.takeDamage(p.damage);
+          p.alive = false;
+          break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Collision attaque au corps à corps de l'ennemi ↔ Fox.
+   * Appelé au moment ATTACK_HIT_FRAME (pas au début de l'anim).
+   * @param {{ config:{ attackDamage:number }, attackHitbox:object, x:number, y:number, facingRight:boolean }} enemy
+   * @param {import("./player.js").Player} player
+   * @returns {boolean} true si le coup a touché
+   */
+  resolveEnemyMeleeHit(enemy, player) {
+    if (player.hp <= 0) return false;
+    if (!rectsOverlap(attackHitboxRect(enemy), hitboxRect(player))) return false;
+    player.takeDamage(enemy.config.attackDamage);
+    return true;
   }
 
   /**
