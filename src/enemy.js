@@ -62,7 +62,7 @@ export const ENEMY_CONFIG = {
   attackDamage: 10,
   attackHitFrame: ATTACK_HIT_FRAME,
   maxHealth: ENEMY_MAX_HEALTH,
-  speed: 95,
+  speed: 160,
   scale: 2,
   /** Hitbox corps — indépendante de la taille visuelle du sprite. */
   hitbox: { width: 40, height: 70, offsetX: 0, offsetY: 6 },

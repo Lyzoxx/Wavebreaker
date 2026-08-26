@@ -272,70 +272,335 @@ async function main() {
   const def = getCharacter(characterId);
 
   if (!def || !def.available) {
-    if (status) status.textContent = "Personnage invalide. Retourne à la sélection.";
+    if (status) {
+      status.textContent =
+        "Personnage invalide. Retourne à la sélection.";
+    }
     return;
   }
 
   try {
-    const pos = startPosition(canvas);
-    const player = await createPlayerFor(def.id, pos.x, pos.y);
-    player.anims.play("idle");
+    /*
+     * ---------------------------------------------------------
+     * CHARGEMENT
+     * ---------------------------------------------------------
+     */
+
+    const grassY = startPosition(canvas).y;
 
     const combat = new CombatSystem();
     await combat.load();
 
-    /** Tableau : prêt pour plusieurs ennemis plus tard. */
-    const enemies = [];
-    const enemy = await createEnemy(pos.x + ENEMY_CONFIG.spawnDistance, pos.y);
+    /*
+     * Fox commence hors écran à gauche.
+     */
+    const foxStartX = -80;
+
+    /*
+     * Position finale de Fox : milieu-gauche.
+     */
+    const foxFinalX = canvas.width * 0.35;
+
+    /*
+     * Gobelin commence hors écran à droite.
+     */
+    const goblinStartX = canvas.width + 80;
+
+    /*
+     * Position finale du gobelin : milieu-droit.
+     */
+    const goblinFinalX = canvas.width * 0.65;
+
+    /*
+     * Création de Fox.
+     */
+    const player = await createPlayerFor(
+      def.id,
+      foxStartX,
+      grassY
+    );
+
+    /*
+     * Création du gobelin.
+     */
+    const enemy = await createEnemy(
+      goblinStartX,
+      grassY
+    );
+
+    /*
+     * Le gobelin regarde vers Fox.
+     */
     enemy.faceTarget(player);
-    enemies.push(enemy);
 
-    if (status) status.remove();
+    /*
+     * Tableau prévu pour plusieurs ennemis plus tard.
+     */
+    const enemies = [enemy];
 
+    /*
+     * On commence avec les animations de marche.
+     */
+    player.state = "walk";
+    player.anims.play("walk", { force: true });
+
+    enemy.state = "walk";
+    enemy.anims.play("walk", { force: true });
+
+    if (status) {
+      status.remove();
+    }
+
+    /*
+     * ---------------------------------------------------------
+     * PHASE D'INTRODUCTION
+     * ---------------------------------------------------------
+     */
+
+    let introFinished = false;
     let last = performance.now();
-    let spaceWasDown = false;
+    let spaceWasDown = false; 
 
     function frame(now) {
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dt = Math.min(
+        0.05,
+        (now - last) / 1000
+      );
+
       last = now;
 
-      const bounds = { width: canvas.width, height: canvas.height };
-      const grassY = startPosition(canvas).y;
+      const bounds = {
+        width: canvas.width,
+        height: canvas.height,
+      };
 
-      const input = readMovementInput();
-      player.update(input, dt, bounds);
-      // Reste sur l'herbe (scène forêt)
-      player.y = grassY;
+      /*
+       * =====================================================
+       * INTRO
+       * =====================================================
+       */
 
-      const spaceDown = !!keys.Space;
-      if (spaceDown && !spaceWasDown) {
-        combat.tryAttack(player, "fireball");
+      if (!introFinished) {
+
+        player.anims.update(dt);
+        enemy.anims.update(dt);
+        
+        /*
+         * -------------------------
+         * FOX AVANCE VERS LE CENTRE
+         * -------------------------
+         */
+
+        if (player.x < foxFinalX) {
+          player.x += player.speed * dt;
+
+          player.facingRight = true;
+
+          player.state = "walk";
+          player.anims.play("walk");
+        } else {
+          player.x = foxFinalX;
+
+          player.state = "idle";
+          player.anims.play("idle");
+        }
+
+        /*
+         * -------------------------
+         * GOBELIN AVANCE VERS FOX
+         * -------------------------
+         */
+
+        if (enemy.x > goblinFinalX) {
+          enemy.x -= enemy.speed * dt;
+
+          enemy.facingRight = false;
+
+          enemy.state = "walk";
+          enemy.anims.play("walk");
+        } else {
+          enemy.x = goblinFinalX;
+
+          enemy.state = "idle";
+          enemy.anims.play("idle");
+        }
+
+        /*
+         * Les deux restent sur la ligne d'herbe.
+         */
+        player.y = grassY;
+        enemy.y = grassY;
+
+        /*
+         * On vérifie si les deux sont arrivés.
+         */
+        const foxArrived =
+          Math.abs(player.x - foxFinalX) < 1;
+
+        const enemyArrived =
+          Math.abs(enemy.x - goblinFinalX) < 1;
+
+        if (foxArrived && enemyArrived) {
+          /*
+           * Position exacte.
+           */
+          player.x = foxFinalX;
+          enemy.x = goblinFinalX;
+
+          /*
+           * Fox regarde vers le gobelin.
+           */
+          player.facingRight = true;
+
+          /*
+           * Gobelin regarde vers Fox.
+           */
+          enemy.facingRight = false;
+
+          /*
+           * Passage en idle.
+           */
+          player.state = "idle";
+          player.anims.play("idle", { force: true });
+
+          enemy.state = "idle";
+          enemy.anims.play("idle", { force: true });
+
+          /*
+           * Fin de l'intro.
+           */
+          introFinished = true;
+        }
       }
-      spaceWasDown = spaceDown;
 
-      for (const e of enemies) {
-        e.y = grassY;
-        e.update(player, dt, bounds, (en, pl) => combat.resolveEnemyMeleeHit(en, pl));
+      /*
+       * =====================================================
+       * JEU NORMAL
+       * =====================================================
+       */
+
+      else {
+        /*
+         * Contrôles de Fox.
+         */
+        const input = readMovementInput();
+
+        player.update(
+          input,
+          dt,
+          bounds
+        );
+
+        /*
+         * Fox reste sur l'herbe.
+         */
+        player.y = grassY;
+
+        /*
+         * Attaque avec Espace.
+         */
+        const spaceDown = !!keys.Space;
+
+        if (spaceDown && !spaceWasDown) {
+          combat.tryAttack(
+            player,
+            "fireball"
+          );
+        }
+
+        spaceWasDown = spaceDown;
+
+        /*
+         * Mise à jour des ennemis.
+         */
+        for (const e of enemies) {
+          e.y = grassY;
+
+          e.update(
+            player,
+            dt,
+            bounds,
+            (en, pl) =>
+              combat.resolveEnemyMeleeHit(
+                en,
+                pl
+              )
+          );
+        }
+
+        /*
+         * Mise à jour du combat.
+         */
+        combat.update(
+          player,
+          dt,
+          bounds,
+          enemies
+        );
+
+        /*
+         * Suppression des ennemis morts.
+         */
+        for (
+          let i = enemies.length - 1;
+          i >= 0;
+          i--
+        ) {
+          if (!enemies[i].alive) {
+            enemies.splice(i, 1);
+          }
+        }
       }
 
-      combat.update(player, dt, bounds, enemies);
+      /*
+       * =====================================================
+       * DESSIN
+       * =====================================================
+       */
 
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        if (!enemies[i].alive) enemies.splice(i, 1);
-      }
+      drawBackground(
+        ctx,
+        def.background
+      );
 
-      drawBackground(ctx, def.background);
+      /*
+       * Fox.
+       */
       player.draw(ctx);
-      for (const e of enemies) e.draw(ctx);
+
+      /*
+       * Gobelin(s).
+       */
+      for (const e of enemies) {
+        e.draw(ctx);
+      }
+
+      /*
+       * Le système de combat ne dessine
+       * que lorsqu'il y a quelque chose à afficher.
+       */
       combat.draw(ctx);
-      drawHud(ctx, player, enemies);
+
+      /*
+       * HUD.
+       */
+      drawHud(
+        ctx,
+        player,
+        enemies
+      );
 
       requestAnimationFrame(frame);
     }
 
+    /*
+     * On démarre la boucle.
+     */
     requestAnimationFrame(frame);
+
   } catch (err) {
     console.error(err);
+
     if (status) {
       status.textContent =
         "Erreur de chargement des sprites. Lance : bun run placeholders";
