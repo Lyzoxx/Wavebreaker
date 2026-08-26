@@ -393,14 +393,10 @@ async function main() {
 
         if (player.x < foxFinalX) {
           player.x += player.speed * dt;
-
           player.facingRight = true;
-
-          player.state = "walk";
           player.anims.play("walk");
         } else {
           player.x = foxFinalX;
-
           player.state = "idle";
           player.anims.play("idle");
         }
@@ -413,14 +409,10 @@ async function main() {
 
         if (enemy.x > goblinFinalX) {
           enemy.x -= enemy.speed * dt;
-
           enemy.facingRight = false;
-
-          enemy.state = "walk";
           enemy.anims.play("walk");
         } else {
           enemy.x = goblinFinalX;
-
           enemy.state = "idle";
           enemy.anims.play("idle");
         }
@@ -480,16 +472,6 @@ async function main() {
        */
 
       else {
-        /*
-         * Contrôles de Fox.
-         */
-        const input = readMovementInput();
-
-        player.update(
-          input,
-          dt,
-          bounds
-        );
 
         /*
          * Fox reste sur l'herbe.
@@ -515,17 +497,6 @@ async function main() {
          */
         for (const e of enemies) {
           e.y = grassY;
-
-          e.update(
-            player,
-            dt,
-            bounds,
-            (en, pl) =>
-              combat.resolveEnemyMeleeHit(
-                en,
-                pl
-              )
-          );
         }
 
         /*
