@@ -18,6 +18,11 @@ if (!ctx) throw new Error("Impossible d'obtenir le contexte 2D");
 /** État des touches */
 const keys = Object.create(null);
 
+let showAttackButton = false;
+
+let combat = null;
+let player = null;
+
 const INPUT_MAP = {
   up: ["KeyW", "KeyZ", "ArrowUp"],
   down: ["KeyS", "ArrowDown"],
@@ -229,7 +234,23 @@ function drawRuinsTree(c, x, gy, scale, distant) {
   }
 }
 
+function isMouseOverAttackButton(mouseX, mouseY) {
+  const buttonWidth = 180;
+  const buttonHeight = 55;
+
+  const x = canvas.width / 2 - buttonWidth / 2;
+  const y = groundY(canvas.height) + 45;
+
+  return (
+    mouseX >= x &&
+    mouseX <= x + buttonWidth &&
+    mouseY >= y &&
+    mouseY <= y + buttonHeight
+  );
+}
+
 function drawBackground(c, backgroundId) {
+
   if (backgroundId === "forest") {
     drawForestBackground(c, canvas.width, canvas.height);
     return;
@@ -240,6 +261,71 @@ function drawBackground(c, backgroundId) {
   g.addColorStop(1, "#0a1628");
   c.fillStyle = g;
   c.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+canvas.addEventListener("click", (e) => {
+  if (!showAttackButton) return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if (isMouseOverAttackButton(mouseX, mouseY)) {
+    showAttackButton = false;
+
+    combat.tryAttack(
+      player,
+      "fireball"
+    );
+  }
+});
+
+function drawAttackButton(c) {
+  if (!showAttackButton) return;
+
+  const buttonWidth = 180;
+  const buttonHeight = 55;
+
+  const x = c.canvas.width / 2 - buttonWidth / 2;
+
+  // Position du bouton sous l'herbe
+  const y = groundY(c.canvas.height) + 45;
+
+  // Fond du bouton
+  c.fillStyle = "#8b2f2f";
+  c.fillRect(
+    x,
+    y,
+    buttonWidth,
+    buttonHeight
+  );
+
+  // Bordure
+  c.strokeStyle = "#e8c56a";
+  c.lineWidth = 3;
+  c.strokeRect(
+    x,
+    y,
+    buttonWidth,
+    buttonHeight
+  );
+
+  // Texte
+  c.fillStyle = "#ffffff";
+  c.font = "bold 20px Segoe UI, sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+
+  c.fillText(
+    "ATTAQUE",
+    c.canvas.width / 2,
+    y + buttonHeight / 2
+  );
+
+  // On remet les valeurs normales
+  c.textAlign = "left";
+  c.textBaseline = "alphabetic";
 }
 
 function drawHud(c, player, enemies) {
@@ -288,7 +374,7 @@ async function main() {
 
     const grassY = startPosition(canvas).y;
 
-    const combat = new CombatSystem();
+    combat = new CombatSystem();
     await combat.load();
 
     /*
@@ -314,7 +400,7 @@ async function main() {
     /*
      * Création de Fox.
      */
-    const player = await createPlayerFor(
+    player = await createPlayerFor(
       def.id,
       foxStartX,
       grassY
@@ -461,6 +547,8 @@ async function main() {
           /*
            * Fin de l'intro.
            */
+          showAttackButton = true;
+
           introFinished = true;
         }
       }
@@ -560,6 +648,11 @@ async function main() {
         player,
         enemies
       );
+
+      /*
+       * Bouton d'attaque.
+       */
+      drawAttackButton(ctx);
 
       requestAnimationFrame(frame);
     }
