@@ -24,10 +24,10 @@ import { attackHitboxRect, distanceBetween, hitboxRect, rectsOverlap } from "./c
 export const ENEMY_SPAWN_DISTANCE = 400;
 
 /** L'ennemi s'arrête à cette distance de Fox (px). */
-export const ENEMY_STOP_DISTANCE = 100;
+export const ENEMY_STOP_DISTANCE = 0;
 
 /** Portée à laquelle l'ennemi peut attaquer (px). */
-export const ENEMY_ATTACK_RANGE = 120;
+export const ENEMY_ATTACK_RANGE = 60;
 
 /** Délai entre deux attaques (millisecondes). */
 export const ENEMY_ATTACK_COOLDOWN = 1500;
@@ -35,12 +35,13 @@ export const ENEMY_ATTACK_COOLDOWN = 1500;
 export const ENEMY_MAX_HEALTH = 100;
 
 /** Index de frame (0 = première) où le coup touche. */
-export const ATTACK_HIT_FRAME = 4;
+export const ATTACK_HIT_FRAME = 2;
 
 export const EnemyState = {
   IDLE: "idle",
   WALK: "walk",
   ATTACK: "attack",
+  RETURN: "return",
   HURT: "hurt",
   DEATH: "death",
 };
@@ -53,7 +54,7 @@ export const ENEMY_CONFIG = {
   spawnDistance: ENEMY_SPAWN_DISTANCE,
   stopDistance: ENEMY_STOP_DISTANCE,
   /** Distance minimale : l'ennemi ne traverse jamais Fox. */
-  minDistance: 56,
+  minDistance: 0,
   attackRange: ENEMY_ATTACK_RANGE,
   /** ms → converti en secondes dans update */
   attackCooldownMs: ENEMY_ATTACK_COOLDOWN,
@@ -122,6 +123,15 @@ export class Enemy {
   constructor(x, y, anims, config = ENEMY_CONFIG) {
     this.x = x;
     this.y = y;
+
+    this.homeX = x;
+    this.homeY = y;
+
+    this.isChasing = false;
+
+    this.startX = x;
+    this.startY = y;
+
     this.anims = anims;
     this.config = config;
 
@@ -168,61 +178,112 @@ export class Enemy {
    * @param {{ width:number, height:number }} bounds
    * @param {(enemy: Enemy, player: import("./player.js").Player) => boolean} applyMeleeHit
    */
+
+
   update(target, dt, bounds, applyMeleeHit) {
     if (!this.alive) return;
-
+  
     if (this.cooldownLeft > 0) {
-      this.cooldownLeft = Math.max(0, this.cooldownLeft - dt);
+      this.cooldownLeft = Math.max(
+        0,
+        this.cooldownLeft - dt
+      );
     }
-
+  
     const finished = this.anims.update(dt);
-
-    // DEATH : prioritaire, joue jusqu'à la dernière frame, puis suppression
+  
+    // =========================
+    // MORT
+    // =========================
     if (this.state === EnemyState.DEATH) {
-      if (finished === EnemyState.DEATH || this.anims.current?.finished) {
+      if (
+        finished === EnemyState.DEATH ||
+        this.anims.current?.finished
+      ) {
         this.alive = false;
       }
+  
       return;
     }
-
+  
+    // =========================
+    // BLESSÉ
+    // =========================
     if (this.state === EnemyState.HURT) {
       if (finished === EnemyState.HURT) {
-        this.state = EnemyState.IDLE;
-        this.anims.play(EnemyState.IDLE);
+        this.state = EnemyState.WALK;
+        this.anims.play(EnemyState.WALK);
       }
+  
       this.faceTarget(target);
       return;
     }
-
+  
+    // =========================
+    // ATTAQUE
+    // =========================
     if (this.state === EnemyState.ATTACK) {
       this.#updateAttack(target, applyMeleeHit);
-      if (finished === EnemyState.ATTACK) {
-        this.state = EnemyState.IDLE;
-        this.anims.play(EnemyState.IDLE);
+    
+      if (this.anims.current?.finished) {
+        this.state = EnemyState.RETURN;
         this.hitApplied = false;
       }
+    
       return;
     }
+    // =========================
+    // RETOUR À LA POSITION INITIALE
+    // =========================
+    if (this.state === EnemyState.RETURN) {
+      this.#returnToStart(dt, bounds);
+      return;
+    }
+  
+    // =========================
+    // COMPORTEMENT NORMAL
+    // =========================
 
+    if (!this.isChasing) {
+      this.state = EnemyState.IDLE;
+      this.anims.play(EnemyState.IDLE);
+      return;
+    }
+  
     this.faceTarget(target);
-    this.#separateFrom(target);
-
+  
     const dist = distanceBetween(this, target);
-    const { stopDistance, attackRange, attackDelay, minDistance } = this.config;
+  
+    const {
+      stopDistance,
+      attackRange,
+      attackDelay,
+      minDistance
+    } = this.config;
 
-    // Trop près : ne jamais avancer dans Fox
-    if (dist <= stopDistance && dist > minDistance) {
-      this.#tryAttack(dist, attackRange, attackDelay, dt);
+    if (!this.isChasing) {
+      this.state = EnemyState.IDLE;
+      this.anims.play(EnemyState.IDLE);
       return;
     }
-
-    if (dist > stopDistance) {
-      this.attackDelayLeft = attackDelay;
-      this.#walkToward(target, dt, bounds);
+  
+    // Le gobelin est suffisamment proche pour attaquer
+    if (dist > attackRange) {
+      this.#walkToward(
+        target,
+        dt,
+        bounds
+      );
       return;
     }
-
-    this.#tryAttack(dist, attackRange, attackDelay, dt);
+  
+    // Cas où le gobelin est très proche
+    this.#tryAttack(
+      dist,
+      attackRange,
+      attackDelay,
+      dt
+    );
   }
 
   /**
@@ -240,25 +301,32 @@ export class Enemy {
   }
 
   #tryAttack(dist, attackRange, attackDelay, dt) {
-    if (dist > attackRange || this.cooldownLeft > 0) {
-      this.attackDelayLeft = attackDelay;
-      this.state = EnemyState.IDLE;
-      this.anims.play(EnemyState.IDLE);
+    if (dist > attackRange) {
       return;
     }
-
+  
+    if (this.cooldownLeft > 0) {
+      return;
+    }
+  
     this.attackDelayLeft -= dt;
+  
     if (this.attackDelayLeft > 0) {
       this.state = EnemyState.IDLE;
       this.anims.play(EnemyState.IDLE);
       return;
     }
-
+  
     this.state = EnemyState.ATTACK;
     this.hitApplied = false;
-    this.anims.play(EnemyState.ATTACK, { force: true });
-    this.cooldownLeft = this.config.attackCooldownMs / 1000;
-    this.attackDelayLeft = attackDelay;
+  
+    this.anims.play(
+      EnemyState.ATTACK,
+      { force: true }
+    );
+  
+    this.cooldownLeft =
+      this.config.attackCooldownMs / 1000;
   }
 
   /**
@@ -266,43 +334,85 @@ export class Enemy {
    * @param {number} dt
    * @param {{ width:number, height:number }} bounds
    */
+
   #walkToward(target, dt, bounds) {
     const dx = target.x - this.x;
     const dy = target.y - this.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = dx / len;
-    const ny = dy / len;
-
-    const nextDist = Math.hypot(dx - nx * this.speed * dt, dy - ny * this.speed * dt);
-    if (nextDist < this.config.stopDistance) {
+    const distance = Math.hypot(dx, dy);
+  
+    // Arrivé suffisamment près de Fox
+    if (distance <= this.config.minDistance) {
       this.state = EnemyState.IDLE;
       this.anims.play(EnemyState.IDLE);
       return;
     }
-
+  
+    const len = distance || 1;
+    const nx = dx / len;
+    const ny = dy / len;
+  
     this.x += nx * this.speed * dt;
     this.y += ny * this.speed * dt;
-
+  
     const margin = 40;
-    this.x = Math.max(margin, Math.min(bounds.width - margin, this.x));
-    this.y = Math.max(margin, Math.min(bounds.height - margin, this.y));
-
+  
+    this.x = Math.max(
+      margin,
+      Math.min(bounds.width - margin, this.x)
+    );
+  
+    this.y = Math.max(
+      margin,
+      Math.min(bounds.height - margin, this.y)
+    );
+  
     this.state = EnemyState.WALK;
     this.anims.play(EnemyState.WALK);
   }
 
-  /** Repousse l'ennemi s'il chevauche Fox. */
-  #separateFrom(target) {
-    const dist = distanceBetween(this, target);
-    const min = this.config.minDistance;
-    if (dist >= min || dist === 0) return;
-
-    const dx = this.x - target.x;
-    const dy = this.y - target.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const push = min - dist;
-    this.x += (dx / len) * push;
-    this.y += (dy / len) * push;
+  #returnToStart(dt, bounds) {
+    const dx = this.startX - this.x;
+    const dy = this.startY - this.y;
+  
+    const distance = Math.hypot(dx, dy);
+  
+    // Distance que le gobelin peut parcourir cette frame
+    const step = this.speed * dt;
+  
+    // S'il est suffisamment proche pour atteindre sa position,
+    // on le place EXACTEMENT dessus.
+    if (distance <= step || distance < 4) {
+      this.x = this.startX;
+      this.y = this.startY;
+  
+      this.state = EnemyState.IDLE;
+      this.isChasing = false;
+  
+      this.anims.play(EnemyState.IDLE, { force: true });
+  
+      return;
+    }
+  
+    const nx = dx / distance;
+    const ny = dy / distance;
+  
+    this.x += nx * step;
+    this.y += ny * step;
+  
+    const margin = 40;
+  
+    this.x = Math.max(
+      margin,
+      Math.min(bounds.width - margin, this.x)
+    );
+  
+    this.y = Math.max(
+      margin,
+      Math.min(bounds.height - margin, this.y)
+    );
+  
+    this.state = EnemyState.RETURN;
+    this.anims.play(EnemyState.WALK);
   }
 
   /**
@@ -316,6 +426,8 @@ export class Enemy {
       this.#die();
       return;
     }
+    
+    this.isChasing = true;
 
     this.state = EnemyState.HURT;
     this.hitApplied = false;

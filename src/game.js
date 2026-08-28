@@ -525,6 +525,9 @@ async function main() {
           player.x = foxFinalX;
           enemy.x = goblinFinalX;
 
+          enemy.startX = enemy.x;
+          enemy.startY = enemy.y;
+
           /*
            * Fox regarde vers le gobelin.
            */
@@ -566,6 +569,12 @@ async function main() {
          */
         player.y = grassY;
 
+        player.update(
+          readMovementInput(),
+          dt,
+          bounds
+        );
+
         /*
          * Attaque avec Espace.
          */
@@ -580,13 +589,19 @@ async function main() {
 
         spaceWasDown = spaceDown;
 
-        /*
-         * Mise à jour des ennemis.
-         */
-        for (const e of enemies) {
-          e.y = grassY;
-        }
+          // Mise à jour des ennemis.
 
+        for (const e of enemies) {
+        e.y = grassY;
+
+        e.update(
+        player,
+        dt,
+        bounds,
+        (enemy, player) =>
+      combat.resolveEnemyMeleeHit(enemy, player)
+  );
+}
         /*
          * Mise à jour du combat.
          */
