@@ -271,14 +271,26 @@ export class CombatSystem {
   /**
    * Collision attaque au corps à corps de l'ennemi ↔ Fox.
    * Appelé au moment ATTACK_HIT_FRAME (pas au début de l'anim).
-   * @param {{ config:{ attackDamage:number }, attackHitbox:object, x:number, y:number, facingRight:boolean }} enemy
+   * Applique le multiplicateur de critique si enemy.isCriticalHit a été
+   * tiré au sort côté enemy.js (1 chance sur 4 par défaut).
+   * @param {{ config:{ attackDamage:number, critMultiplier?:number }, isCriticalHit?:boolean, attackHitbox:object, x:number, y:number, facingRight:boolean }} enemy
    * @param {import("./player.js").Player} player
    * @returns {boolean} true si le coup a touché
    */
   resolveEnemyMeleeHit(enemy, player) {
     if (player.hp <= 0) return false;
     if (!rectsOverlap(attackHitboxRect(enemy), hitboxRect(player))) return false;
-    player.takeDamage(enemy.config.attackDamage);
+
+    const isCritical = !!enemy.isCriticalHit;
+    const multiplier = isCritical ? enemy.config.critMultiplier ?? 2 : 1;
+    const damage = enemy.config.attackDamage * multiplier;
+
+    player.takeDamage(damage);
+
+    if (isCritical) {
+      console.log("Coup critique du gobelin !", damage, "dégâts");
+    }
+
     return true;
   }
 
