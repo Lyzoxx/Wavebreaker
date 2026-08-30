@@ -73,7 +73,7 @@ export class Player {
     /** @type {"idle"|"walk"|"attack"|"hurt"} */
     this.state = "idle";
 
-    this.speed = 160; // pixels / seconde
+    this.speed = 300; // pixels / seconde
     this.facingRight = true;
     this.scale = 2;
 

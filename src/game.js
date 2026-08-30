@@ -23,6 +23,22 @@ let showAttackButton = false;
 let combat = null;
 let player = null;
 
+/**
+ * SYSTÈME DE ROUND :
+ *   playerTurn = true  → Fox peut attaquer (espace ou clic sur le bouton)
+ *   playerTurn = false → on attend la riposte du gobelin
+ *                         (chase → attaque → retour à sa place)
+ *   combatFinished     → un des deux personnages est mort, plus personne
+ *                         ne joue.
+ *
+ * Le passage de false à true se fait dans la boucle de jeu, en lisant
+ * enemy.turnFinished (mis à true par enemy.js une fois le gobelin
+ * revenu à sa position de départ).
+ */
+let playerTurn = true;
+let combatFinished = false;
+let combatResult = null; // "victory" | "defeat" | null
+
 const INPUT_MAP = {
   up: ["KeyW", "KeyZ", "ArrowUp"],
   down: ["KeyS", "ArrowDown"],
@@ -250,7 +266,6 @@ function isMouseOverAttackButton(mouseX, mouseY) {
 }
 
 function drawBackground(c, backgroundId) {
-
   if (backgroundId === "forest") {
     drawForestBackground(c, canvas.width, canvas.height);
     return;
@@ -263,21 +278,32 @@ function drawBackground(c, backgroundId) {
   c.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+/**
+ * Tente une attaque de Fox si c'est son tour. Centralisé ici pour que
+ * le clavier (Espace) et le clic sur le bouton utilisent exactement la
+ * même règle : impossible d'attaquer hors de son tour ou une fois le
+ * combat terminé.
+ */
+function attemptPlayerAttack() {
+  if (!playerTurn || combatFinished) return;
+
+  const attacked = combat.tryAttack(player, "fireball");
+  if (attacked) {
+    // On referme la main : c'est au tour du gobelin de répondre.
+    playerTurn = false;
+    showAttackButton = false;
+  }
+}
+
 canvas.addEventListener("click", (e) => {
   if (!showAttackButton) return;
 
   const rect = canvas.getBoundingClientRect();
-
   const mouseX = e.clientX - rect.left;
   const mouseY = e.clientY - rect.top;
 
   if (isMouseOverAttackButton(mouseX, mouseY)) {
-    showAttackButton = false;
-
-    combat.tryAttack(
-      player,
-      "fireball"
-    );
+    attemptPlayerAttack();
   }
 });
 
@@ -294,22 +320,12 @@ function drawAttackButton(c) {
 
   // Fond du bouton
   c.fillStyle = "#8b2f2f";
-  c.fillRect(
-    x,
-    y,
-    buttonWidth,
-    buttonHeight
-  );
+  c.fillRect(x, y, buttonWidth, buttonHeight);
 
   // Bordure
   c.strokeStyle = "#e8c56a";
   c.lineWidth = 3;
-  c.strokeRect(
-    x,
-    y,
-    buttonWidth,
-    buttonHeight
-  );
+  c.strokeRect(x, y, buttonWidth, buttonHeight);
 
   // Texte
   c.fillStyle = "#ffffff";
@@ -317,26 +333,69 @@ function drawAttackButton(c) {
   c.textAlign = "center";
   c.textBaseline = "middle";
 
-  c.fillText(
-    "ATTAQUE",
-    c.canvas.width / 2,
-    y + buttonHeight / 2
-  );
+  c.fillText("ATTAQUE", c.canvas.width / 2, y + buttonHeight / 2);
 
   // On remet les valeurs normales
   c.textAlign = "left";
   c.textBaseline = "alphabetic";
 }
 
-function drawHud(c, player, enemies) {
-  c.fillStyle = "rgba(0, 0, 0, 0.4)";
-  c.fillRect(16, 16, 220, 52);
-  c.fillStyle = "#e8f4ff";
-  c.font = "14px Segoe UI, sans-serif";
-  c.fillText(`Fox HP ${player.hp}/${player.maxHp}`, 28, 38);
-  const enemy = enemies.find((e) => e.alive || e.state === "death");
-  const enemyHp = enemy ? `${Math.max(0, enemy.health)}/${enemy.maxHealth}` : "—";
-  c.fillText(`Ennemi HP ${enemyHp}`, 28, 56);
+function drawHealthBar(c, entity) {
+  const barWidth = 90;
+  const barHeight = 14;
+
+  // Position au-dessus du personnage
+  const x = entity.x - barWidth / 2;
+  const y = entity.y - 85;
+
+  const maxHp = entity.maxHp ?? entity.maxHealth;
+  const hp = Math.max(0, entity.hp ?? entity.health);
+
+  const ratio = maxHp > 0 ? hp / maxHp : 0;
+
+  // Fond rouge = partie de vie perdue
+  c.fillStyle = "#b83232";
+  c.fillRect(x, y, barWidth, barHeight);
+
+  // Vie restante en vert
+  c.fillStyle = "#39a844";
+  c.fillRect(x, y, barWidth * ratio, barHeight);
+
+  // Bordure
+  c.strokeStyle = "#111";
+  c.lineWidth = 2;
+  c.strokeRect(x, y, barWidth, barHeight);
+
+  // Texte des PV
+  c.fillStyle = "#ffffff";
+  c.font = "bold 11px Segoe UI, sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+
+  c.fillText(`${hp}/${maxHp}`, entity.x, y + barHeight / 2);
+
+  // Réinitialisation
+  c.textAlign = "left";
+  c.textBaseline = "alphabetic";
+}
+
+/** Bannière de fin de combat (victoire / défaite). */
+function drawEndMessage(c, result) {
+  if (!result) return;
+
+  const text = result === "victory" ? "VICTOIRE !" : "DÉFAITE...";
+  const color = result === "victory" ? "#7be07f" : "#e06060";
+
+  c.save();
+  c.fillStyle = "rgba(0, 0, 0, 0.55)";
+  c.fillRect(0, 0, canvas.width, canvas.height);
+
+  c.fillStyle = color;
+  c.font = "bold 48px Segoe UI, sans-serif";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  c.fillText(text, canvas.width / 2, canvas.height / 2);
+  c.restore();
 }
 
 /**
@@ -359,8 +418,7 @@ async function main() {
 
   if (!def || !def.available) {
     if (status) {
-      status.textContent =
-        "Personnage invalide. Retourne à la sélection.";
+      status.textContent = "Personnage invalide. Retourne à la sélection.";
     }
     return;
   }
@@ -400,19 +458,12 @@ async function main() {
     /*
      * Création de Fox.
      */
-    player = await createPlayerFor(
-      def.id,
-      foxStartX,
-      grassY
-    );
+    player = await createPlayerFor(def.id, foxStartX, grassY);
 
     /*
      * Création du gobelin.
      */
-    const enemy = await createEnemy(
-      goblinStartX,
-      grassY
-    );
+    const enemy = await createEnemy(goblinStartX, grassY);
 
     /*
      * Le gobelin regarde vers Fox.
@@ -445,14 +496,10 @@ async function main() {
 
     let introFinished = false;
     let last = performance.now();
-    let spaceWasDown = false; 
+    let spaceWasDown = false;
 
     function frame(now) {
-      const dt = Math.min(
-        0.05,
-        (now - last) / 1000
-      );
-
+      const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
 
       const bounds = {
@@ -467,10 +514,9 @@ async function main() {
        */
 
       if (!introFinished) {
-
         player.anims.update(dt);
         enemy.anims.update(dt);
-        
+
         /*
          * -------------------------
          * FOX AVANCE VERS LE CENTRE
@@ -512,11 +558,8 @@ async function main() {
         /*
          * On vérifie si les deux sont arrivés.
          */
-        const foxArrived =
-          Math.abs(player.x - foxFinalX) < 1;
-
-        const enemyArrived =
-          Math.abs(enemy.x - goblinFinalX) < 1;
+        const foxArrived = Math.abs(player.x - foxFinalX) < 1;
+        const enemyArrived = Math.abs(enemy.x - goblinFinalX) < 1;
 
         if (foxArrived && enemyArrived) {
           /*
@@ -541,6 +584,7 @@ async function main() {
           /*
            * Passage en idle.
            */
+
           player.state = "idle";
           player.anims.play("idle", { force: true });
 
@@ -548,80 +592,115 @@ async function main() {
           enemy.anims.play("idle", { force: true });
 
           /*
-           * Fin de l'intro.
+           * Fin de l'intro : c'est le tour de Fox.
            */
           showAttackButton = true;
+          playerTurn = true;
 
           introFinished = true;
         }
-      }
-
-      /*
-       * =====================================================
-       * JEU NORMAL
-       * =====================================================
-       */
-
-      else {
+      } else {
+        /*
+         * =====================================================
+         * JEU NORMAL
+         * =====================================================
+         */
 
         /*
          * Fox reste sur l'herbe.
          */
         player.y = grassY;
 
-        player.update(
-          readMovementInput(),
-          dt,
-          bounds
-        );
+        player.update(readMovementInput(), dt, bounds);
 
         /*
-         * Attaque avec Espace.
+         * Attaque avec Espace (seulement si c'est le tour de Fox).
          */
         const spaceDown = !!keys.Space;
 
         if (spaceDown && !spaceWasDown) {
-          combat.tryAttack(
-            player,
-            "fireball"
-          );
+          attemptPlayerAttack();
         }
 
         spaceWasDown = spaceDown;
 
-          // Mise à jour des ennemis.
-
+        // Mise à jour des ennemis.
         for (const e of enemies) {
-        e.y = grassY;
+          e.y = grassY;
 
-        e.update(
-        player,
-        dt,
-        bounds,
-        (enemy, player) =>
-      combat.resolveEnemyMeleeHit(enemy, player)
-  );
-}
+          // Le goblin joue tant que le combat n'est pas terminé : sa
+          // propre IA (isChasing) décide s'il agit ou reste idle.
+          if (!combatFinished) {
+            e.update(player, dt, bounds, (en, pl) => combat.resolveEnemyMeleeHit(en, pl));
+          }
+        }
+
         /*
-         * Mise à jour du combat.
+         * Mise à jour du combat (projectiles, collisions).
          */
-        combat.update(
-          player,
-          dt,
-          bounds,
-          enemies
-        );
+        combat.update(player, dt, bounds, enemies);
 
         /*
          * Suppression des ennemis morts.
          */
-        for (
-          let i = enemies.length - 1;
-          i >= 0;
-          i--
-        ) {
+        for (let i = enemies.length - 1; i >= 0; i--) {
           if (!enemies[i].alive) {
             enemies.splice(i, 1);
+          }
+        }
+
+        /*
+         * -----------------------------------------------------
+         * FIN DE COMBAT ?
+         * -----------------------------------------------------
+         */
+        if (!combatFinished) {
+          if (player.hp <= 0) {
+            combatFinished = true;
+            combatResult = "defeat";
+            playerTurn = false;
+            showAttackButton = false;
+          } else if (enemies.length === 0) {
+            combatFinished = true;
+            combatResult = "victory";
+            playerTurn = false;
+            showAttackButton = false;
+          }
+        }
+
+        /*
+         * -----------------------------------------------------
+         * SYSTÈME DE ROUND : qui doit jouer ?
+         * -----------------------------------------------------
+         * Fox attaque → le gobelin encaisse (enemy.takeDamage met
+         * isChasing à true) → il avance vers Fox → l'attaque → repart
+         * à sa place (enemy.js met alors turnFinished à true) → on
+         * redonne la main à Fox ci-dessous. Si la boule de feu rate sa
+         * cible, personne n'est déclenché : on redonne aussi la main
+         * dès que tout est retombé au calme (pas de riposte à
+         * attendre).
+         */
+        if (!combatFinished && !playerTurn) {
+          const activeEnemy = enemies[0];
+
+          if (activeEnemy) {
+            if (activeEnemy.turnFinished) {
+              // Le gobelin a fini sa riposte : Fox peut réattaquer.
+              activeEnemy.turnFinished = false;
+              playerTurn = true;
+              showAttackButton = true;
+            } else if (
+              combat.pendingAttack === null &&
+              combat.projectiles.length === 0 &&
+              !activeEnemy.isChasing &&
+              !activeEnemy.isBusy &&
+              player.state !== "attack"
+            ) {
+              // Attaque de Fox terminée sans avoir touché le gobelin :
+              // pas de riposte à attendre, on lui redonne la main.
+              playerTurn = true;
+              showAttackButton = true;
+            }
           }
         }
       }
@@ -632,10 +711,7 @@ async function main() {
        * =====================================================
        */
 
-      drawBackground(
-        ctx,
-        def.background
-      );
+      drawBackground(ctx, def.background);
 
       /*
        * Fox.
@@ -649,6 +725,13 @@ async function main() {
         e.draw(ctx);
       }
 
+      // Barres de vie au-dessus des personnages
+      drawHealthBar(ctx, player);
+
+      for (const e of enemies) {
+        drawHealthBar(ctx, e);
+      }
+
       /*
        * Le système de combat ne dessine
        * que lorsqu'il y a quelque chose à afficher.
@@ -656,18 +739,14 @@ async function main() {
       combat.draw(ctx);
 
       /*
-       * HUD.
-       */
-      drawHud(
-        ctx,
-        player,
-        enemies
-      );
-
-      /*
        * Bouton d'attaque.
        */
       drawAttackButton(ctx);
+
+      /*
+       * Bannière de fin de combat.
+       */
+      drawEndMessage(ctx, combatResult);
 
       requestAnimationFrame(frame);
     }
@@ -676,13 +755,11 @@ async function main() {
      * On démarre la boucle.
      */
     requestAnimationFrame(frame);
-
   } catch (err) {
     console.error(err);
 
     if (status) {
-      status.textContent =
-        "Erreur de chargement des sprites. Lance : bun run placeholders";
+      status.textContent = "Erreur de chargement des sprites. Lance : bun run placeholders";
     }
   }
 }
